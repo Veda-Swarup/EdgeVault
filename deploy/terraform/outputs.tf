@@ -1,0 +1,11 @@
+output "eks_cluster_name" { value = aws_eks_cluster.edgevault.name }
+output "aws_region" { value = var.aws_region }
+output "ecr_repository_url" { value = aws_ecr_repository.edgevault.repository_url }
+output "chunks_bucket" { value = aws_s3_bucket.chunks.bucket }
+output "snapshots_bucket" { value = aws_s3_bucket.snapshots.bucket }
+output "kms_key_arn" { value = aws_kms_key.volumes.arn }
+output "database_endpoint" { value = aws_db_instance.edgevault.address }
+output "database_secret_arn" { value = aws_db_instance.edgevault.master_user_secret[0].secret_arn }
+output "edge_role_arn" { value = aws_iam_role.edge.arn }
+output "gc_role_arn" { value = aws_iam_role.gc.arn }
+output "account_id" { value = data.aws_caller_identity.current.account_id }

@@ -1,0 +1,10 @@
+.git
+.terraform
+**/.terraform
+bin
+**/bin
+**/__pycache__
+*.tfstate
+*.tfstate.backup
+*.tfplan
+.DS_Store

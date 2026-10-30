@@ -1,0 +1,137 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: edgevault-headless
+  namespace: edgevault
+spec:
+  clusterIP: None
+  selector:
+    app: edgevault
+  ports:
+    - name: http
+      port: 8443
+      targetPort: http
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: edgevault
+  namespace: edgevault
+spec:
+  type: ClusterIP
+  selector:
+    app: edgevault
+  ports:
+    - name: http
+      port: 8443
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: edgevault
+  namespace: edgevault
+spec:
+  serviceName: edgevault-headless
+  replicas: 2
+  selector:
+    matchLabels:
+      app: edgevault
+  template:
+    metadata:
+      labels:
+        app: edgevault
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: /metrics
+        prometheus.io/port: "8443"
+        prometheus.io/scheme: https
+    spec:
+      serviceAccountName: edgevault-edge
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: edge
+          image: __EDGEVAULT_IMAGE__
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8443
+          envFrom:
+            - configMapRef:
+                name: edgevault-config
+          env:
+            - name: EDGEVAULT_DB_URL
+              valueFrom:
+                secretKeyRef:
+                  name: edgevault-runtime
+                  key: database-url
+            - name: EDGEVAULT_CHUNK_HMAC_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: edgevault-runtime
+                  key: chunk-hmac-key
+            - name: EDGEVAULT_ADMIN_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: edgevault-runtime
+                  key: admin-token
+          startupProbe:
+            httpGet:
+              path: /healthz
+              port: http
+              scheme: HTTPS
+            failureThreshold: 30
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+              scheme: HTTPS
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+              scheme: HTTPS
+            periodSeconds: 5
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: cache
+              mountPath: /var/lib/edgevault
+            - name: tmp
+              mountPath: /tmp
+            - name: tls
+              mountPath: /var/run/edgevault-tls
+              readOnly: true
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: tls
+          secret:
+            secretName: edgevault-tls
+  volumeClaimTemplates:
+    - metadata:
+        name: cache
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 5Gi

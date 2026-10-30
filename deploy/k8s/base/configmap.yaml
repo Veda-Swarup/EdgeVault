@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: edgevault-config
+  namespace: edgevault
+data:
+  EDGEVAULT_S3_REGION: __EDGEVAULT_AWS_REGION__
+  EDGEVAULT_S3_CHUNKS_BUCKET: __EDGEVAULT_CHUNKS_BUCKET__
+  EDGEVAULT_S3_SNAPSHOTS_BUCKET: __EDGEVAULT_SNAPSHOTS_BUCKET__
+  EDGEVAULT_KMS_KEY_ID: __EDGEVAULT_KMS_KEY_ARN__
+  EDGEVAULT_KMS_FAKE: "false"
+  EDGEVAULT_S3_FORCE_PATH_STYLE: "false"
+  EDGEVAULT_CACHE_PATH: /var/lib/edgevault/cache
+  EDGEVAULT_CACHE_MAX_BYTES: "1073741824"
+  EDGEVAULT_LISTEN_ADDR: ":8443"
+  EDGEVAULT_TLS_CERT_FILE: /var/run/edgevault-tls/tls.crt
+  EDGEVAULT_TLS_KEY_FILE: /var/run/edgevault-tls/tls.key
+  EDGEVAULT_MIGRATIONS_PATH: /app/db/migrations

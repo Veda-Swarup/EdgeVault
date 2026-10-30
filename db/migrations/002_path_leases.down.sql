@@ -1,0 +1,10 @@
+DROP INDEX IF EXISTS leases_expiry_idx;
+ALTER TABLE leases DROP CONSTRAINT IF EXISTS leases_volume_fk;
+ALTER TABLE leases DROP CONSTRAINT leases_pkey;
+ALTER TABLE leases ADD COLUMN file_id BIGINT;
+UPDATE leases l SET file_id = f.id FROM files f WHERE f.volume_id=l.volume_id AND f.path=l.file_path;
+DELETE FROM leases WHERE file_id IS NULL;
+ALTER TABLE leases ALTER COLUMN file_id SET NOT NULL;
+ALTER TABLE leases DROP COLUMN volume_id;
+ALTER TABLE leases DROP COLUMN file_path;
+ALTER TABLE leases ADD CONSTRAINT leases_pkey PRIMARY KEY (file_id);

@@ -1,0 +1,48 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test-and-build:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: edgevault
+          POSTGRES_PASSWORD: edgevault
+          POSTGRES_DB: edgevault_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U edgevault -d edgevault_test"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Run unit and PostgreSQL integration tests
+        env:
+          EDGEVAULT_TEST_DB_URL: postgres://edgevault:edgevault@localhost:5432/edgevault_test?sslmode=disable
+          EDGEVAULT_CHUNK_HMAC_KEY: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+        run: make test
+
+      - name: Run Go vet
+        run: make lint
+
+      - name: Build Docker image
+        run: docker build -f deploy/docker/Dockerfile -t edgevault:ci .

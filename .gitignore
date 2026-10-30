@@ -1,0 +1,44 @@
+# Binaries & build output
+bin/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Go test & coverage artifacts
+*.test
+*.out
+coverage.txt
+coverage.html
+/tmp/
+
+# Dependency directories
+vendor/
+
+# Env files with real secrets — never commit these
+.env
+.env.local
+.env*.local
+
+# Editor
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Terraform state — contains sensitive outputs
+deploy/terraform/*.tfstate
+deploy/terraform/*.tfstate.backup
+deploy/terraform/.terraform/
+deploy/terraform/.terraform.lock.hcl
+
+# AI-generated planning/build prompt files (internal only)
+EdgeVault_AI_build_prompt.md
+CONTINUE.md
+EXPLANATION.md
