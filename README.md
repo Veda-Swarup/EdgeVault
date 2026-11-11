@@ -4,16 +4,23 @@ A production-inspired, hybrid-cloud file store built in **Go**. Files are split 
 
 New volumes use 4 MiB AES-256-GCM encrypted chunks with KMS-wrapped data keys. Ransomware alerts save the clean manifest into the Object Lock snapshots bucket with seven-day per-object GOVERNANCE retention.
 
-Built for interview defense and hands-on mastery of cloud storage architectures (AWS S3, KMS, RDS PostgreSQL, EKS, distributed caching, deduplication, and lease fencing).
+## Features
 
----
+- **File dashboard:** create volumes, upload and download files, browse retained versions, and recover snapshots.
+- **Storage pipeline:** fixed-size chunking, compression, encrypted chunks, deduplication, and S3-compatible object storage.
+- **Edge resilience:** local disk cache, crash-resilient write journal, and background uploads.
+- **Concurrent writes:** file leases, fencing, and conditional version checks.
+- **Recovery:** ransomware alert handling, protected snapshots, retention policies, and garbage collection.
+- **Deployment:** Docker Compose for local development and Terraform/Kubernetes manifests for AWS.
 
-## Quick Navigation
+## Documentation
 
-- **[CONTINUE.md](file:///Users/vedaswarupbhushan/Documents/projects/EdgeVault/CONTINUE.md)** — **Start here!** Full handover guide, current status, exact test/run commands, interview Q&A, and resume prompt.
-- **[EdgeVault_AI_build_prompt.md](file:///Users/vedaswarupbhushan/Documents/projects/EdgeVault/EdgeVault_AI_build_prompt.md)** — Master engineering specification and phase requirements.
-
----
+- [Local setup](#run-the-dashboard-locally)
+- [Architecture](docs/architecture.md)
+- [Dashboard behavior and limitations](web/README.md)
+- [Build and test](#build-and-test)
+- [AWS / Kubernetes deployment](#aws--kubernetes-deployment)
+- [MIT License](LICENSE)
 
 ## Run the dashboard locally
 
@@ -116,17 +123,29 @@ This produces `web/dist`. Normal Go builds embed the source HTML/CSS/JS directly
 | `http://localhost:8080` | Normal Go API and embedded dashboard; requires `make run` |
 | Vite's printed URL, usually `http://127.0.0.1:5173` | Frontend development; requires both `npm run dev` and `make run` |
 | `http://localhost:9001` | Local Silo object storage console |
-| `http://127.0.0.1:5174` | Temporary verification preview from the UI implementation session, if still running; not the normal setup |
 
 - **404 on `/v1/volumes` at port 5173:** a plain static server is serving the frontend without the API proxy. Use port 8080, or stop that static server and launch `npm run dev` from `web/`. A command such as `python3 -m http.server` does not connect the frontend to Go. `npm run preview` serves the optional built assets; it is not the documented API-proxied development setup.
 - **API proxy connection refused:** start `make run` and check its startup logs. The Vite proxy expects HTTP on port 8080; adjust `web/vite.config.js` if using another port or HTTPS.
 - **Docker daemon unavailable:** open Docker Desktop, wait until it is ready, and retry `make up`.
 - **Database or object storage unavailable:** inspect `docker compose -f deploy/docker/docker-compose.yml ps` and the container logs. Both PostgreSQL and Silo must be healthy for normal file operations.
 - **Missing environment variables with `go run ./cmd/edge`:** use `make run`, which supplies the local development settings.
-- **Temporary preview files disappear after a restart:** that preview uses in-memory file storage. Use the normal port 8080 setup with Docker volumes for persistence; preview files are not automatically migrated.
 - **Writes are paused:** check the volume's ransomware alert and restore a clean snapshot through **Snapshots & recovery**.
 
 The console uses the existing unauthenticated file/volume/snapshot API. Keep the development service on a trusted local/private network until authentication and authorization are implemented. See [web/README.md](web/README.md) for metric definitions and upload/download limitations.
+
+## Repository layout
+
+```text
+cmd/             Edge service and garbage collector entry points
+internal/        Storage, encryption, metadata, API, and recovery logic
+web/             Embedded dashboard and optional Vite tooling
+db/migrations/   PostgreSQL schema migrations
+deploy/          Docker, Kubernetes, and Terraform configuration
+docs/            Architecture documentation
+bench/           End-to-end workload and recovery benchmark
+```
+
+Local planning notes, dependency directories, build output, and environment files containing secrets are excluded by `.gitignore`.
 
 ## Build and test
 
@@ -139,6 +158,9 @@ make build
 # Storage engine unit tests
 make test-unit
 
+# Static analysis
+make lint
+
 # Embedded frontend asset and routing checks
 go test ./web
 
@@ -148,6 +170,8 @@ EDGEVAULT_TEST_DB_URL="postgres://edgevault:edgevault@localhost:5433/edgevault_t
 EDGEVAULT_CHUNK_HMAC_KEY="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" \
 make test-integration
 ```
+
+API integration tests skip when `EDGEVAULT_TEST_DB_URL` is unset. Use a dedicated test database: the suite resets its schema.
 
 ## AWS / Kubernetes deployment
 
@@ -181,7 +205,7 @@ kubectl -n edgevault rollout status statefulset/edgevault
 
 The CronJob starts with `--dry-run`. Confirm its logs and the GC test results before removing that argument. The Edge IRSA policy has no `s3:DeleteObject`; only the GC role has delete permission, limited to chunk objects. The deployment acceptance test from an edge pod is `aws s3 rm "s3://$(terraform -chdir=deploy/terraform output -raw chunks_bucket)/some-key"` and it must be denied. Run the Phase 5 concurrent-writer integration test against the service twice while both replicas are ready.
 
-The local MinIO Object Lock check confirmed that protected snapshot objects carry GOVERNANCE retention metadata and that a version-specific delete is refused until expiry. In a versioned S3 bucket, an ordinary `DeleteObject` can add a delete marker while leaving the retained version intact; the Edge IRSA role therefore has no delete permission on the snapshot bucket either. Local acceptance runs left three protected test objects under `protected/live-object-lock/`, `protected/live-cross-edge-ransom/`, and `protected/bench-final-local-20261029/`; their seven-day retention ends on 2026-11-05 UTC.
+The local MinIO Object Lock check confirmed that protected snapshot objects carry GOVERNANCE retention metadata and that a version-specific delete is refused until expiry. In a versioned S3 bucket, an ordinary `DeleteObject` can add a delete marker while leaving the retained version intact; the Edge IRSA role therefore has no delete permission on the snapshot bucket either.
 
 ## Retention and garbage collection
 
@@ -198,7 +222,6 @@ Run the workload against a new volume name: `go run ./bench -url http://localhos
 | Environment | Files / bytes | Workers | Throughput MiB/s | Mean/max PUT ms | Mean/max GET ms | Cache hit ratio | Dedup ratio | Detection / restore time |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
 | Local (single run, Docker PostgreSQL + MinIO, one edge) | 50 / 3.125 MiB | 8 | 3.13 | 147.19 / 225.62 | 9.38 / 35.07 | 1.00 | 0.0357 | 86.49 / 34.83 |
-| EKS (2 replicas) |  |  |  |  |  |  |  |  |
 
 The local row was measured on 2026-10-29 with `-files 50 -size-bytes 65536 -workers 8`; values are workload-specific and are not an EKS performance claim. Detection/restore values are milliseconds.
 
