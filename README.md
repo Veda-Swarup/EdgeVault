@@ -15,30 +15,138 @@ Built for interview defense and hands-on mastery of cloud storage architectures 
 
 ---
 
-## Quick Start
+## Run the dashboard locally
 
-### 1. Start Database
-```bash
-docker start edgevault-pg
-# or
-docker compose -f deploy/docker/docker-compose.pg-only.yml up -d
+### Prerequisites
+
+- Go matching `go.mod` (currently Go 1.26.5).
+- Docker Desktop, running, with Docker Compose available.
+- `make`.
+- Node.js and npm only if you want the optional Vite development workflow. Vite requires Node.js 20.19+ or 22.12+.
+
+Run all commands below from the repository root unless noted otherwise.
+
+### 1. Start PostgreSQL and local file storage
+
+```sh
+make up
 ```
 
-### 2. Run Tests
-```bash
-# Unit tests
+This starts PostgreSQL on port **5433**, Silo (a MinIO-compatible S3 server) on port **9000**, and initializes the chunk and protected snapshot buckets. The Silo console is available at [http://localhost:9001](http://localhost:9001). Local development credentials are configured in the Makefile and Docker Compose file.
+
+**This setup stores data locally, not in Amazon S3.** PostgreSQL and Silo keep their data in Docker volumes. `make down` stops the services without deleting those volumes; deleting the volumes removes their data. Starting only PostgreSQL is sufficient for the database-backed tests with in-memory blobs, but the normal application also needs Silo.
+
+### 2. Start the Go API and dashboard
+
+In another terminal, from the repository root:
+
+```sh
+make run
+```
+
+The Makefile supplies the local database, storage, and development key settings. The Go service applies database migrations and serves both the API and the embedded dashboard.
+
+Open **[http://localhost:8080](http://localhost:8080)** and keep `make run` running while using the UI. No separate Node.js backend or frontend build is required for this workflow.
+
+### 3. Use files and versions
+
+1. Click **New volume**, enter a name, and create it.
+2. Click **Upload files**, or drop files onto the file table.
+3. Choose a destination path and upload. Reusing an existing path prompts before creating a new version; identical content leaves the version unchanged.
+4. Use **Download** for the current file, or **History** to download a retained earlier version.
+5. After deleting a file, enable **Show deleted files** to access its retained history.
+
+To make an older downloaded version current again, upload it at the original path.
+
+### 4. Create a snapshot and restore it
+
+1. Select the volume and open **Snapshots & recovery**.
+2. Click **Create snapshot**, enter a reason, and choose whether to request protection.
+3. Make changes to the files.
+4. Click **Restore** beside the desired snapshot.
+5. Type the volume name and click **Restore volume**.
+
+A restore applies to the **whole volume**. It creates new versions and removes current files that did not exist at the snapshot's commit. Protected snapshots request seven-day Object Lock retention and require the protected snapshot bucket initialized by `make up`. A standard snapshot records a recovery point without Object Lock protection.
+
+## Frontend development and implementation
+
+The UI uses **HTML, CSS, and JavaScript**, with the existing **Go API** as its backend:
+
+```text
+Browser → Go API → PostgreSQL (metadata and history)
+                → Silo locally / Amazon S3 when deployed (file chunks)
+```
+
+| File | Purpose |
+| --- | --- |
+| `web/index.html` | Dashboard structure, file explorer, recovery panel, and dialogs |
+| `web/style.css` | Responsive layout and styling |
+| `web/app.js` | API requests, uploads, leases, history, snapshots, and restore controls |
+| `web/web.go` | Embeds and serves the frontend assets from the Go binary |
+| `internal/api/dashboard.go` | Read endpoints for volume summaries and dashboard data |
+| `internal/meta/dashboard.go` | Consistent database reads for files, totals, and recent snapshots |
+| `web/vite.config.js` | Development proxy to the Go service on port 8080 |
+
+Uploads and deletes acquire a write lease before changing a file. Uploads also send the version observed by the UI using `If-Match`, preserving the backend's concurrency checks. The dashboard adds `GET /v1/volumes` and `GET /v1/volumes/{volume}/dashboard`; writes reuse the existing API.
+
+### Optional: edit with Vite
+
+Keep `make run` running on port **8080**. In a separate terminal:
+
+```sh
+cd web
+npm ci
+npm run dev
+```
+
+Open the URL printed by Vite, normally **http://127.0.0.1:5173**. Vite reloads frontend changes and proxies API, health, and metrics requests to Go on port 8080. If the port is occupied, Vite may choose another port; use the URL it prints.
+
+To check the frontend build:
+
+```sh
+npm run build
+```
+
+This produces `web/dist`. Normal Go builds embed the source HTML/CSS/JS directly, so `web/dist` is optional. After editing the assets, restart `make run` to update the embedded UI on port 8080. Use `make build` from the repository root to compile the Go binaries into `bin/`.
+
+### Ports and troubleshooting
+
+| Address | Purpose |
+| --- | --- |
+| `http://localhost:8080` | Normal Go API and embedded dashboard; requires `make run` |
+| Vite's printed URL, usually `http://127.0.0.1:5173` | Frontend development; requires both `npm run dev` and `make run` |
+| `http://localhost:9001` | Local Silo object storage console |
+| `http://127.0.0.1:5174` | Temporary verification preview from the UI implementation session, if still running; not the normal setup |
+
+- **404 on `/v1/volumes` at port 5173:** a plain static server is serving the frontend without the API proxy. Use port 8080, or stop that static server and launch `npm run dev` from `web/`. A command such as `python3 -m http.server` does not connect the frontend to Go. `npm run preview` serves the optional built assets; it is not the documented API-proxied development setup.
+- **API proxy connection refused:** start `make run` and check its startup logs. The Vite proxy expects HTTP on port 8080; adjust `web/vite.config.js` if using another port or HTTPS.
+- **Docker daemon unavailable:** open Docker Desktop, wait until it is ready, and retry `make up`.
+- **Database or object storage unavailable:** inspect `docker compose -f deploy/docker/docker-compose.yml ps` and the container logs. Both PostgreSQL and Silo must be healthy for normal file operations.
+- **Missing environment variables with `go run ./cmd/edge`:** use `make run`, which supplies the local development settings.
+- **Temporary preview files disappear after a restart:** that preview uses in-memory file storage. Use the normal port 8080 setup with Docker volumes for persistence; preview files are not automatically migrated.
+- **Writes are paused:** check the volume's ransomware alert and restore a clean snapshot through **Snapshots & recovery**.
+
+The console uses the existing unauthenticated file/volume/snapshot API. Keep the development service on a trusted local/private network until authentication and authorization are implemented. See [web/README.md](web/README.md) for metric definitions and upload/download limitations.
+
+## Build and test
+
+From the repository root:
+
+```sh
+# Compile both Go binaries, including the embedded dashboard
+make build
+
+# Storage engine unit tests
 make test-unit
 
-# PostgreSQL-backed integration tests, including encryption, restore,
-# optimistic concurrency, and simulated ransomware recovery:
+# Embedded frontend asset and routing checks
+go test ./web
+
+# PostgreSQL-backed API tests, including the dashboard read endpoints.
+# Uses the separate test database created by make up; the suite resets its schema.
 EDGEVAULT_TEST_DB_URL="postgres://edgevault:edgevault@localhost:5433/edgevault_test" \
 EDGEVAULT_CHUNK_HMAC_KEY="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" \
 make test-integration
-```
-
-### 3. Build Binaries
-```bash
-make build
 ```
 
 ## AWS / Kubernetes deployment
@@ -93,3 +201,7 @@ Run the workload against a new volume name: `go run ./bench -url http://localhos
 | EKS (2 replicas) |  |  |  |  |  |  |  |  |
 
 The local row was measured on 2026-10-29 with `-files 50 -size-bytes 65536 -workers 8`; values are workload-specific and are not an EKS performance claim. Detection/restore values are milliseconds.
+
+## License
+
+Licensed under the [MIT License](LICENSE).

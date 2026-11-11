@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/vedaswarup/edgevault/web"
 )
 
 // NewServer wires up the HTTP mux and returns a configured http.Server.
@@ -17,6 +19,8 @@ func NewServer(h *Handler, addr string, log *slog.Logger) *http.Server {
 	// Volume management
 	mux.HandleFunc("/v1/volumes", func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
+		case http.MethodGet:
+			h.handleVolumes(w, r)
 		case http.MethodPost:
 			h.handleCreateVolume(w, r)
 		default:
@@ -30,6 +34,9 @@ func NewServer(h *Handler, addr string, log *slog.Logger) *http.Server {
 		path := r.URL.Path
 
 		switch {
+		case strings.HasSuffix(path, "/dashboard") && r.Method == http.MethodGet:
+			h.handleDashboard(w, r)
+
 		case strings.HasSuffix(path, "/state") && r.Method == http.MethodGet:
 			h.handleState(w, r)
 
@@ -97,6 +104,8 @@ func NewServer(h *Handler, addr string, log *slog.Logger) *http.Server {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("ok")) //nolint:errcheck
 	})
+
+	mux.Handle("/", web.Handler())
 
 	return &http.Server{
 		Addr:         addr,

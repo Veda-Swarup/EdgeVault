@@ -20,6 +20,12 @@ vendor/
 .env
 .env.local
 .env*.local
+.env.*
+!.env.example
+!.env.*.example
+.aws/
+*.pem
+*.key
 
 # Editor
 .idea/
@@ -42,3 +48,13 @@ deploy/terraform/.terraform.lock.hcl
 EdgeVault_AI_build_prompt.md
 CONTINUE.md
 EXPLANATION.md
+
+# Frontend development output
+web/node_modules/
+web/dist/
+node_modules/
+*.log
+
+# Local agent configuration and scratch documents
+.agents/
+.codex/

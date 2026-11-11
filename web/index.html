@@ -1,0 +1,255 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="EdgeVault file storage and recovery console" />
+    <title>EdgeVault · Storage console</title>
+    <link rel="stylesheet" href="/style.css" />
+    <script type="module" src="/app.js"></script>
+  </head>
+  <body>
+    <aside class="sidebar">
+      <a class="brand" href="/" aria-label="EdgeVault home">
+        <span class="brand-mark">
+          E
+          <span>▰</span>
+        </span>
+        EdgeVault
+        <span class="brand-dot">●</span>
+      </a>
+      <p class="eyebrow">WORKSPACE</p>
+      <nav aria-label="Main navigation">
+        <button class="nav active" data-view="files">
+          <span>▦</span>
+          File explorer
+        </button>
+        <button class="nav" data-view="recovery">
+          <span>↶</span>
+          Snapshots & recovery
+        </button>
+        <button class="nav" data-view="system">
+          <span>◉</span>
+          System status
+        </button>
+      </nav>
+      <div class="sidebar-note">
+        <span class="mini-icon">◇</span>
+        <strong>Your data. Your history.</strong>
+        <p>Chunk-based storage with versioning and point-in-time recovery.</p>
+      </div>
+      <div class="sidebar-bottom">
+        <span id="service-dot" class="dot"></span>
+        <span id="service-label">Checking service…</span>
+        <small>EDGEVAULT CONSOLE / 01</small>
+      </div>
+    </aside>
+    <div class="workspace">
+      <header class="topbar">
+        <span>
+          Workspace
+          <span class="slash">/</span>
+          <strong id="breadcrumb">File explorer</strong>
+        </span>
+        <div class="top-actions">
+          <label for="volume-select">Volume</label>
+          <select id="volume-select" aria-label="Select volume">
+            <option value="">Select a volume</option>
+          </select>
+          <button id="create-volume" class="button small">+ New volume</button>
+        </div>
+      </header>
+      <main>
+        <div class="page-heading">
+          <div>
+            <p class="eyebrow accent">STORAGE, WITH A SAFETY NET</p>
+            <h1 id="page-title">File explorer</h1>
+            <p id="page-description">A clear view of your files. Every version within reach.</p>
+          </div>
+          <button id="refresh" class="button">↻ Refresh</button>
+        </div>
+        <div id="notice" class="notice" role="status" aria-live="polite" hidden></div>
+        <div id="alert" class="notice danger" role="alert" hidden>
+          Writes are paused for this volume after a ransomware alert. Review snapshots and restore a
+          clean state.
+        </div>
+        <section class="stats" aria-label="Storage overview">
+          <article>
+            <span>Current files</span>
+            <strong id="stat-files">—</strong>
+            <small>Live files in this volume</small>
+          </article>
+          <article>
+            <span>Current file size</span>
+            <strong id="stat-current">—</strong>
+            <small>Before compression and deduplication</small>
+          </article>
+          <article>
+            <span>Stored chunks</span>
+            <strong id="stat-stored">—</strong>
+            <small>Includes history and pending cleanup</small>
+          </article>
+          <article>
+            <span>Retained versions</span>
+            <strong id="stat-versions">—</strong>
+            <small>Including deletion records</small>
+          </article>
+        </section>
+        <section id="files-view" class="view">
+          <div class="panel">
+            <div class="panel-heading">
+              <div>
+                <h2>
+                  All files
+                  <span id="file-count" class="count">0</span>
+                </h2>
+                <p id="volume-caption">Select or create a volume to get started.</p>
+              </div>
+              <button id="upload-button" class="button primary" disabled>↑ Upload files</button>
+              <input id="file-input" type="file" multiple hidden />
+            </div>
+            <div class="file-toolbar">
+              <label class="search">
+                <span>⌕</span>
+                <input
+                  id="search"
+                  type="search"
+                  placeholder="Search by file name or path"
+                  aria-label="Search files"
+                />
+              </label>
+              <label class="check">
+                <input id="show-deleted" type="checkbox" />
+                Show deleted files
+              </label>
+            </div>
+            <div id="drop-zone" class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>File name</th>
+                    <th>Size</th>
+                    <th>Version</th>
+                    <th>Last updated</th>
+                    <th class="right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="file-rows"></tbody>
+              </table>
+              <div id="file-empty" class="empty">
+                <span class="empty-symbol">▤</span>
+                <h3>A home for your files</h3>
+                <p>
+                  Create a volume, then upload your first file.
+                  <br />
+                  You can also drop files here.
+                </p>
+              </div>
+            </div>
+            <div class="panel-footer">
+              <span id="file-footer">No volume selected</span>
+              <span>
+                4 MiB chunks
+                <span class="slash">·</span>
+                Version history
+              </span>
+            </div>
+          </div>
+          <div class="info-strip">
+            <span>↗</span>
+            <div>
+              <strong>Change a file. Keep its history.</strong>
+              <p>
+                Upload the same path to create a version. Unchanged chunks are reused within the
+                volume.
+              </p>
+            </div>
+          </div>
+        </section>
+        <section id="recovery-view" class="view" hidden>
+          <div class="panel">
+            <div class="panel-heading">
+              <div>
+                <h2>Snapshots</h2>
+                <p>The 100 most recent snapshots for this volume.</p>
+              </div>
+              <button id="snapshot-button" class="button primary" disabled>
+                + Create snapshot
+              </button>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Snapshot</th>
+                    <th>Commit</th>
+                    <th>Protection</th>
+                    <th>Created</th>
+                    <th class="right">Action</th>
+                  </tr>
+                </thead>
+                <tbody id="snapshot-rows"></tbody>
+              </table>
+              <div id="snapshot-empty" class="empty">
+                <span class="empty-symbol">↶</span>
+                <h3>No snapshots yet</h3>
+                <p>Create a recovery point before making changes.</p>
+              </div>
+            </div>
+          </div>
+          <div class="info-strip">
+            <span>◇</span>
+            <div>
+              <strong>Restore creates new versions.</strong>
+              <p>
+                A full-volume restore also removes files added after that snapshot. Protected
+                snapshots request seven-day Object Lock retention.
+              </p>
+            </div>
+          </div>
+        </section>
+        <section id="system-view" class="view" hidden>
+          <div class="panel">
+            <div class="panel-heading">
+              <div>
+                <h2>Service & runtime</h2>
+                <p>Live checks and counters from the connected Go service.</p>
+              </div>
+            </div>
+            <dl id="system-details" class="details"></dl>
+          </div>
+          <div class="info-strip">
+            <span>i</span>
+            <div>
+              <strong>What these measurements mean</strong>
+              <p>
+                Chunk reuse and cache counters cover this process since startup, across all volumes.
+                They are not a volume’s storage savings percentage.
+              </p>
+            </div>
+          </div>
+        </section>
+        <footer class="page-footer">
+          <span>EDGEVAULT</span>
+          <span>Local console · Connected to the current origin</span>
+        </footer>
+      </main>
+    </div>
+    <dialog id="modal">
+      <form id="modal-form">
+        <div class="dialog-heading">
+          <h2 id="modal-title"></h2>
+          <button type="button" id="close-modal" class="icon-button" aria-label="Close dialog">
+            ×
+          </button>
+        </div>
+        <div id="modal-content"></div>
+        <p id="modal-error" class="form-error" role="alert" hidden></p>
+        <div class="dialog-actions">
+          <button type="button" id="cancel-modal" class="button">Cancel</button>
+          <button id="confirm-modal" type="submit" class="button primary">Confirm</button>
+        </div>
+      </form>
+    </dialog>
+  </body>
+</html>
